@@ -76,6 +76,44 @@ def mr_step(B, Gamma1, Gamma2, phi_star, m_star):
     return sig0 / sigma_xx_step(B, Gamma1, Gamma2, phi_star, m_star) - 1.0
 
 
+@njit(fastmath=True, cache=True)
+def mr_step_fast(B, Gamma1, Gamma2, phi_star, m_star):
+    """
+    Versione jit-compilata di mr_step (loop esplicito su B).
+    sig0 calcolato analiticamente nel limite B->0:
+        sig0 = 4*phi/G1 + 4*psi/G2
+    """
+    N = B.shape[0]
+    K_MEV_local = 0.116
+    psi_star = np.pi / 4.0 - phi_star
+    G1sq = Gamma1 * Gamma1
+    G2sq = Gamma2 * Gamma2
+    sig0 = 4.0 * phi_star / Gamma1 + 4.0 * psi_star / Gamma2
+    out = np.empty(N, dtype=np.float64)
+    for i in range(N):
+        Bi = B[i]
+        w = K_MEV_local * Bi / m_star
+        if w == 0.0:
+            w = 1e-12
+        S1 = 2.0 * phi_star / w
+        S2 = 2.0 * psi_star / w
+        jw = 1j * w
+        denom = 1.0 + 1j * np.exp(-(Gamma1 * S1 + Gamma2 * S2))
+        e1 = np.exp(-(Gamma1 + jw) * S1)
+        e2 = np.exp(-(Gamma2 + jw) * S2)
+        i1 = 1.0 / (Gamma1 + jw)
+        i2 = 1.0 / (Gamma2 + jw)
+        Z12 = (1.0 - e2) / denom * (i2 - i1)
+        Z21 = (1.0 - e1) / denom * (i1 - i2)
+        t1 = (1.0 - e1) * 0.5
+        t2 = (1.0 - e2) * 0.5
+        OI1 = (4.0 / (G1sq + w * w)) * (Gamma1 - jw) * (phi_star + Z12 * w * t1)
+        OI2 = (4.0 / (G2sq + w * w)) * (Gamma2 - jw) * (psi_star + Z21 * w * t2)
+        sig_xx = (OI1 + OI2).real
+        out[i] = sig0 / sig_xx - 1.0
+    return out
+
+
 # =====================================================================
 # MODELLO 2 - COS^4 / BESSEL
 # =====================================================================
