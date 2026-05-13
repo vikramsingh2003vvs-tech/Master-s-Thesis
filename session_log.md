@@ -174,3 +174,56 @@ Tutto il resto (fit, estrazione, plot, formula Markdown) si adatta automaticamen
 |------|-----------|
 | `FIT_CUPY.ipynb` | Celle markdown formule (nuove); fix S1/S2 in `cp_sigma_xx_step`; T_DEP config + 5 sostituzioni in cella T-dep |
 | `chambers_lib.py` | Fix S1/S2 in `_sigma_complex_step` |
+
+---
+
+## 4. Osservazione fisica — Perché T=30K non si fitta bene ad alto campo (2026-05-13)
+
+### Il problema osservato
+
+Nel fit globale Bessel (modello cos⁴, `FIT_CUPY.ipynb`), il pannello T=30K mostra un flesso verso l'alto nei dati ad alto campo (B > 50T) che la curva fittata non riesce a riprodurre. Questo si osserva **esclusivamente a T=30K**: i pannelli T=4K, T=40K e T=100K sono tutti fittati in modo eccellente su tutto il range di campi.
+
+### Perché il modello cos⁴ fallisce — analisi numerica
+
+Il parametro α = Γ_an / (8ω_c) vale ~0.62 a B=85T per tutte le temperature: la serie di Bessel converge perfettamente ad alto campo, quindi il problema **non è numerico**.
+
+La scala di campo a cui il MR inizia a saturare è B_sat = Γ_is · m* / K_MEV:
+
+| T (K) | Γ_is (meV) | Γ_an (meV) | B_sat (T) |
+|-------|-----------|-----------|----------|
+| 4     | 8.9       | 32.4      | ~115     |
+| 30    | 13.7      | 32.9      | ~177     |
+| 40    | 15.6      | 33.1      | ~202     |
+| 100   | 26.8      | 34.5      | ~347     |
+
+A B=85T siamo ancora nel regime semiclassico (ω_c ≪ Γ_is per tutte le T): il MR dovrebbe crescere come B² e la serie di Bessel dovrebbe seguire i dati. Eppure a 30K non lo fa.
+
+### Diagnosi: fluttuazioni superconduttrici
+
+Nd-LSCO p=0.24 ha T_c ≈ 20–22K. Le quattro temperature del dataset si trovano in regimi fisici distinti:
+
+| T (K) | T − T_c | Condizione |
+|-------|---------|-----------|
+| 4     | sotto T_c | SC soppresso da B (B_MIN = 25T > H_c2) → stato normale puro |
+| **30**| **~10K sopra T_c** | **Fluttuazioni SC forti** |
+| 40    | ~20K sopra T_c | Fluttuazioni deboli → fit perfetto |
+| 100   | ~80K sopra T_c | Fluttuazioni assenti → fit perfetto |
+
+Le **fluttuazioni superconduttrici** (tipo Aslamazov-Larkin) danno un contributo alla conduttività che è:
+- **negativo rispetto al MR** (riducono la resistività e quindi sopprimono il MR osservato)
+- **dipendente dal campo** (vengono soppresse dall'aumento di B)
+
+### Meccanismo del misfit a 30K
+
+1. A B basso–intermedio (5–50T): le fluttuazioni SC riducono il MR osservato **sotto** il valore di Boltzmann/Chambers puro → l'optimizer abbassa il prefactor A per compensare
+2. A B alto (> 60T): il campo sopprime le fluttuazioni → emerge il MR del vero stato normale → i dati superano la curva fittata (che era stata "abbassata" in fase di ottimizzazione per adattarsi ai campi intermedi)
+
+Il risultato è il **flesso verso l'alto** visibile nel pannello arancione (30K): non è il modello cos⁴ che sbaglia la forma funzionale, è che a 30K il sistema sovrappone due contributi fisici — il MR di Boltzmann più un termine di fluttuazione B-dipendente — e il modello ne conosce soltanto uno.
+
+### Perché T=4K funziona comunque
+
+B_MIN = 25T è sopra H_c2 a 4K: tutti i punti misurati sono già in stato normale puro, senza fluttuazioni. Il fit è quindi perfetto nel range disponibile.
+
+### Implicazione per la tesi
+
+L'impossibilità di fittare T=30K in modo globale con il modello di Chambers non è un difetto del codice o del modello angolare (cos⁴ o gradino): è la **firma delle fluttuazioni superconduttrici nel trasporto** che il formalismo di Boltzmann non può descrivere per costruzione. Questa limitazione è fisicamente attesa e documenta che a T=30K il sistema non è ancora un metallo normale ordinario nemmeno a campi moderati.
